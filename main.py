@@ -1,39 +1,71 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from typing import List, Dict
+from typing import Dict
 from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+from fpdf import FPDF
+import google.generativeai as genai
+import os
+import uuid
+from datetime import datetime, timedelta
+
+# Load API key from .env
+load_dotenv()
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 app = FastAPI()
 
-# Allow CORS so React frontend can access the API
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, use the actual frontend URL
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Request model
 class PlanningRequest(BaseModel):
     goal: str
     hoursPerDay: str
     timeSlot: Dict[str, str]
 
-# Response model
-class PlanResponse(BaseModel):
-    plan: List[str]
+@app.post("/generate-plan-pdf")
+def generate_plan_pdf(data: PlanningRequest):
+    prompt = (
+        f"Create a detailed 5-day study plan in structured format for the goal: {data.goal}. "
+        f"The user is available {data.hoursPerDay} hours per day between {data.timeSlot['start']} and {data.timeSlot['end']}. "
+        f"Each day should include: Date, Day, Topics to Study, and Time Allotted. Format it as a neat list."
+    )
 
-@app.post("/generate-plan", response_model=PlanResponse)
-def generate_plan(data: PlanningRequest):
-    print("Received planning request:", data.dict())
+    try:
+        model = genai.GenerativeModel(model_name="models/gemini-1.5-flash")
+        response = model.generate_content(prompt)
+        plan_text = response.text.strip()
 
-    # Replace this dummy logic with your AI planner or LLM
-    dummy_plan = [
-        f"Day 1: Understand the basics of {data.goal}",
-        f"Day 2: Deep dive into core concepts of {data.goal}",
-        f"Day 3: Practice exercises for {data.goal}",
-        f"Day 4: Project-based learning for {data.goal}",
-    ]
+        # Parse content into PDF
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Arial", size=12)
+        pdf.set_text_color(0, 0, 0)
+        pdf.cell(200, 10, txt="Structured 5-Day Study Plan", ln=True, align="C")
 
-    return {"plan": dummy_plan}
+        # Add metadata
+        pdf.ln(5)
+        pdf.cell(200, 10, txt=f"Goal: {data.goal}", ln=True)
+        pdf.cell(200, 10, txt=f"Daily Study Time: {data.hoursPerDay} hrs", ln=True)
+        pdf.cell(200, 10, txt=f"Time Slot: {data.timeSlot['start']} - {data.timeSlot['end']}", ln=True)
+        pdf.ln(10)
+
+        for line in plan_text.split('\n'):
+            line = line.strip()
+            if line:
+                pdf.multi_cell(0, 10, line)
+
+        file_name = f"study_plan_{uuid.uuid4().hex[:8]}.pdf"
+        file_path = f"./{file_name}"
+        pdf.output(file_path)
+
+        return FileResponse(path=file_path, media_type="application/pdf", filename="study_plan.pdf")
+
+    except Exception as e:
+        return {"error": str(e)}
