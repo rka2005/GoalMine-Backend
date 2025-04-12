@@ -69,3 +69,24 @@ def generate_plan_pdf(data: PlanningRequest):
 
     except Exception as e:
         return {"error": str(e)}
+
+@app.post("/generate-plan")
+def generate_plan(data: PlanningRequest):
+    prompt = (
+        f"Create a detailed 5-day study plan in structured format for the goal: {data.goal}. "
+        f"The user is available {data.hoursPerDay} hours per day between {data.timeSlot['start']} and {data.timeSlot['end']}. "
+        f"Each day should include: Date, Day, Topics to Study, and Time Allotted. Return as a list of strings."
+    )
+
+    try:
+        model = genai.GenerativeModel(model_name="models/gemini-1.5-flash")
+        response = model.generate_content(prompt)
+        plan_text = response.text.strip()
+
+        # Split the response into a list of steps
+        plan_list = [line.strip() for line in plan_text.split('\n') if line.strip()]
+
+        return {"plan": plan_list}
+
+    except Exception as e:
+        return {"error": str(e)}
