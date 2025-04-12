@@ -73,9 +73,14 @@ def generate_plan_pdf(data: PlanningRequest):
 @app.post("/generate-plan")
 def generate_plan(data: PlanningRequest):
     prompt = (
-        f"Create a detailed 5-day study plan in structured format for the goal: {data.goal}. "
-        f"The user is available {data.hoursPerDay} hours per day between {data.timeSlot['start']} and {data.timeSlot['end']}. "
-        f"Each day should include: Date, Day, Topics to Study, and Time Allotted. Return as a list of strings."
+        f"Based on the goal: '{data.goal}'\n\n"
+        f"Create a study plan that fits within these constraints:\n"
+        f"- Daily available time: {data.hoursPerDay} hours\n"
+        f"- Time slot: {data.timeSlot['start']} to {data.timeSlot['end']}\n\n"
+        f"Format each day exactly as follows:\n"
+        f"Day [number]: [current date + day number]\n"
+        f"Topics: [specific topics related to {data.goal}]\n"
+        f"Time Allotted: [time slots within {data.timeSlot['start']} - {data.timeSlot['end']}]"
     )
 
     try:
@@ -83,8 +88,12 @@ def generate_plan(data: PlanningRequest):
         response = model.generate_content(prompt)
         plan_text = response.text.strip()
 
-        # Split the response into a list of steps
-        plan_list = [line.strip() for line in plan_text.split('\n') if line.strip()]
+        # Clean and format the response
+        plan_list = [
+            line.strip()
+            for line in plan_text.split('\n')
+            if line.strip() and not line.startswith('```')
+        ]
 
         return {"plan": plan_list}
 
