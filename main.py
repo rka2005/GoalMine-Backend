@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Depends, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -17,6 +17,8 @@ from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 import pytz
 import re
+import json
+import base64
 
 # Add these new imports at the top of the file
 from config import (
@@ -204,15 +206,22 @@ async def generate_plan_pdf(
 @app.post("/sync-calendar")
 async def sync_calendar(request: Request, token: dict = Depends(verify_firebase_token)):
     try:
-        user_id = token.get('uid')
-        if not user_id:
-            raise HTTPException(status_code=401, detail="User ID not found in token")
+        data = await request.json()
+        plan = data.get('plan', [])
+        calendar_credentials = data.get('calendar_credentials')
 
-        request_data = await request.json()
-        plan = request_data.get('plan', [])
+        if not plan or not calendar_credentials:
+            raise HTTPException(status_code=400, detail="Missing required data")
 
-        if not plan:
-            raise HTTPException(status_code=400, detail="No plan data provided")
+        # Create credentials object from the received credentials
+        credentials = Credentials(
+            token=calendar_credentials['token'],
+            refresh_token=calendar_credentials['refresh_token'],
+            token_uri=calendar_credentials['token_uri'],
+            client_id=calendar_credentials['client_id'],
+            client_secret=calendar_credentials['client_secret'],
+            scopes=calendar_credentials['scopes']
+        )
 
         # Initialize Google Calendar API
         flow = Flow.from_client_config(
@@ -318,34 +327,55 @@ async def sync_calendar(request: Request, token: dict = Depends(verify_firebase_
             detail=f"Failed to sync calendar: {str(e)}"
         )
 
+# Update the Google auth endpoint
 @app.get("/auth/google")
-async def google_auth():
-    flow = Flow.from_client_config(
-        {
-            "web": {
-                "client_id": GOOGLE_CLIENT_ID,
-                "client_secret": GOOGLE_CLIENT_SECRET,
-                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                "token_uri": "https://oauth2.googleapis.com/token",
-            }
-        },
-        scopes=SCOPES,
-        redirect_uri=REDIRECT_URI
-    )
+async def google_auth(state: str = None):
+    if not state:
+        raise HTTPException(status_code=400, detail="State parameter is required")
 
-    authorization_url, _ = flow.authorization_url(
-        access_type='offline',
-        include_granted_scopes='true'
-    )
+    try:
+        # Create OAuth2 flow
+        flow = Flow.from_client_config(
+            {
+                "web": {
+                    "client_id": GOOGLE_CLIENT_ID,
+                    "client_secret": GOOGLE_CLIENT_SECRET,
+                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                }
+            },
+            scopes=SCOPES,
+            redirect_uri=REDIRECT_URI
+        )
 
-    return HTMLResponse(content=f"""
-        <script>
-            window.location.href = "{authorization_url}";
-        </script>
-    """)
+        # Include the state parameter
+        authorization_url, _ = flow.authorization_url(
+            access_type='offline',
+            include_granted_scopes='true',
+            state=state,
+            prompt='consent'  # Force consent screen to get refresh token
+        )
 
+        return HTMLResponse(content=f"""
+            <script>
+                window.location.href = "{authorization_url}";
+            </script>
+        """)
+    except Exception as e:
+        print(f"Auth error: {str(e)}")
+        return HTMLResponse(content=f"""
+            <script>
+                window.opener.postMessage(
+                    {{ type: 'calendar_auth_error', error: 'Failed to initialize authentication' }},
+                    'http://localhost:5173'
+                );
+                window.close();
+            </script>
+        """)
+
+# Update the callback endpoint
 @app.get("/auth/callback")
-async def auth_callback(code: str = None, error: str = None):
+async def auth_callback(code: str = None, error: str = None, state: str = None):
     if error:
         return HTMLResponse(content=f"""
             <script>
@@ -358,6 +388,9 @@ async def auth_callback(code: str = None, error: str = None):
         """)
 
     try:
+        # Decode state parameter
+        state_data = json.loads(base64.b64decode(state).decode('utf-8'))
+
         flow = Flow.from_client_config(
             {
                 "web": {
@@ -365,16 +398,23 @@ async def auth_callback(code: str = None, error: str = None):
                     "client_secret": GOOGLE_CLIENT_SECRET,
                     "auth_uri": "https://accounts.google.com/o/oauth2/auth",
                     "token_uri": "https://oauth2.googleapis.com/token",
-                    "redirect_uris": [REDIRECT_URI]
                 }
             },
             scopes=SCOPES,
             redirect_uri=REDIRECT_URI
         )
 
-        # Get credentials from authorization code
+        # Exchange code for credentials
         flow.fetch_token(code=code)
         credentials = flow.credentials
+
+        # Verify the Firebase token from state
+        try:
+            decoded_token = auth.verify_id_token(state_data['token'])
+            if decoded_token['uid'] != state_data['userId']:
+                raise ValueError("User ID mismatch")
+        except Exception as e:
+            raise HTTPException(status_code=401, detail="Invalid authentication")
 
         return HTMLResponse(content=f"""
             <script>
@@ -395,12 +435,13 @@ async def auth_callback(code: str = None, error: str = None):
                 window.close();
             </script>
         """)
+
     except Exception as e:
-        print(f"Auth callback error: {str(e)}")
+        print(f"Callback error: {str(e)}")
         return HTMLResponse(content=f"""
             <script>
                 window.opener.postMessage(
-                    {{ type: 'calendar_auth_error', error: 'Authentication failed' }},
+                    {{ type: 'calendar_auth_error', error: 'Authentication failed: {str(e)}' }},
                     'http://localhost:5173'
                 );
                 window.close();
