@@ -33,7 +33,9 @@ genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 # Initialize Firebase Admin SDK
 try:
     if not firebase_admin._apps:  # Check if already initialized
-        cred = credentials.Certificate("./firebase-adminsdk.json")
+        cred = credentials.Certificate(
+            "./firebase-adminsdk.json"
+        )
         firebase_admin.initialize_app(cred, {
             'projectId': 'goalmine-bcc41',
         })
