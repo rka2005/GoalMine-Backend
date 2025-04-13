@@ -34,3 +34,7 @@ yarn-error.log*
 .vscode
 *.swp
 *.swo
+
+firebase-adminsdk.json
+config.py
+.env.example
