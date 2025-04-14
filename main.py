@@ -158,30 +158,91 @@ async def generate_plan_pdf(
     user_id = token['uid']
 
     try:
-        model = genai.GenerativeModel(model_name="models/gemini-1.5-flash")
-        response = model.generate_content(
-            f"Create a detailed study plan for: {data.goal}\n"
-            f"Available time: {data.hoursPerDay} hours per day\n"
-            f"Time slot: {data.timeSlot['start']} to {data.timeSlot['end']}"
+        # Generate plan with structured format
+        model = genai.GenerativeModel(
+            model_name="models/gemini-1.5-flash",
+            generation_config={
+                "temperature": 0.7,
+                "top_p": 0.8,
+                "top_k": 40,
+                "max_output_tokens": 2048,
+            }
         )
 
+        # Use the same prompt format as generate-plan for consistency
+        prompt = (
+            f"Create a study plan for: '{data.goal}'\n\n"
+            f"Available time: {data.hoursPerDay} hours per day\n"
+            f"Time slot: {data.timeSlot['start']} to {data.timeSlot['end']}\n\n"
+            f"Format the plan exactly as follows:\n"
+            f"Day 1: April 14, 2025\n"
+            f"Topics: [List specific topics]\n"
+            f"Time Allotted: {data.timeSlot['start']} - {data.timeSlot['end']}\n\n"
+        )
+
+        response = model.generate_content(prompt)
+        if not response or not response.text:
+            raise ValueError("Empty response from Gemini API")
+
+        # Create PDF
         pdf = FPDF()
         pdf.add_page()
-        pdf.set_font("Arial", size=12)
-        pdf.cell(200, 10, txt="Study Plan", ln=True, align="C")
-        pdf.ln(5)
-        pdf.cell(200, 10, txt=f"Goal: {data.goal}", ln=True)
-        pdf.multi_cell(0, 10, response.text.strip())
 
-        file_name = f"study_plan_{user_id}_{uuid.uuid4().hex[:8]}.pdf"
+        # Set font and styling
+        pdf.set_font("Arial", "B", 16)
+        pdf.cell(0, 10, "Study Plan", ln=True, align="C")
+        pdf.ln(5)
+
+        # Add goal section
+        pdf.set_font("Arial", "B", 12)
+        pdf.cell(0, 10, "Goal:", ln=True)
+        pdf.set_font("Arial", "", 12)
+        pdf.multi_cell(0, 10, data.goal)
+        pdf.ln(5)
+
+        # Add availability section
+        pdf.set_font("Arial", "B", 12)
+        pdf.cell(0, 10, "Availability:", ln=True)
+        pdf.set_font("Arial", "", 12)
+        pdf.multi_cell(0, 10, f"Hours per day: {data.hoursPerDay}")
+        pdf.multi_cell(0, 10, f"Time slot: {data.timeSlot['start']} - {data.timeSlot['end']}")
+        pdf.ln(10)
+
+        # Add plan content
+        pdf.set_font("Arial", "B", 14)
+        pdf.cell(0, 10, "Daily Plan:", ln=True)
+        pdf.ln(5)
+
+        # Format and add the plan content
+        plan_content = response.text.strip().split('\n')
+        pdf.set_font("Arial", "", 12)
+        for line in plan_content:
+            if line.startswith('Day'):
+                pdf.set_font("Arial", "B", 12)
+                pdf.ln(5)
+            pdf.multi_cell(0, 10, line)
+            pdf.set_font("Arial", "", 12)
+
+        # Save PDF
         os.makedirs("./tmp", exist_ok=True)
+        file_name = f"study_plan_{user_id}_{uuid.uuid4().hex[:8]}.pdf"
         file_path = f"./tmp/{file_name}"
         pdf.output(file_path)
+
+        # Clean up old files (optional)
+        for f in os.listdir("./tmp"):
+            if f.startswith(f"study_plan_{user_id}_"):
+                file_age = datetime.now() - datetime.fromtimestamp(os.path.getctime(f"./tmp/{f}"))
+                if file_age.days > 1:  # Remove files older than 1 day
+                    os.remove(f"./tmp/{f}")
 
         return FileResponse(
             path=file_path,
             media_type="application/pdf",
-            filename=file_name
+            filename=file_name,
+            headers={
+                "Content-Disposition": f"attachment; filename={file_name}"
+            }
         )
 
     except Exception as e:
@@ -199,12 +260,6 @@ def parse_day_info(day_text):
         # - start time
         # - end time
         # from the day_text
-
-        # Example parsing logic (adjust as needed)
-        day_number = int(day_text.split(':')[0].strip().replace('Day', '').strip())
-        topics = "Example Topics"  # Replace with actual parsing logic
-        start_time = "09:00 AM"  # Replace with actual parsing logic
-        end_time = "05:00 PM"  # Replace with actual parsing logic
 
         # Return structured data
         return {
