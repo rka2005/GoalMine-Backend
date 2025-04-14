@@ -200,6 +200,12 @@ def parse_day_info(day_text):
         # - end time
         # from the day_text
 
+        # Example parsing logic (adjust as needed)
+        day_number = int(day_text.split(':')[0].strip().replace('Day', '').strip())
+        topics = "Example Topics"  # Replace with actual parsing logic
+        start_time = "09:00 AM"  # Replace with actual parsing logic
+        end_time = "05:00 PM"  # Replace with actual parsing logic
+
         # Return structured data
         return {
             'day_number': day_number,
