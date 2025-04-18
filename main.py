@@ -123,7 +123,7 @@ async def generate_plan(
 
     try:
         model = genai.GenerativeModel(
-            model_name="models/gemini-1.5-flash",
+            model_name="models/gemini-2.0-flash",
             generation_config={
                 "temperature": 0.7,
                 "top_p": 0.8,
@@ -167,7 +167,7 @@ async def generate_plan_pdf(
     try:
         # Generate plan with structured format
         model = genai.GenerativeModel(
-            model_name="models/gemini-1.5-flash",
+            model_name="models/gemini-2.0-flash",
             generation_config={
                 "temperature": 0.7,
                 "top_p": 0.8,
