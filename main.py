@@ -54,6 +54,8 @@ app.add_middleware(
 security = HTTPBearer()
 
 # Firebase token verification function
+
+
 async def verify_firebase_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
     if not credentials:
         raise HTTPException(
@@ -87,12 +89,15 @@ async def verify_firebase_token(credentials: HTTPAuthorizationCredentials = Depe
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+
 class PlanningRequest(BaseModel):
     goal: str
     hoursPerDay: str
     timeSlot: Dict[str, str]
 
 # Modified generate-plan endpoint with Firebase auth
+
+
 @app.post("/generate-plan")
 async def generate_plan(
     data: PlanningRequest,
@@ -118,7 +123,7 @@ async def generate_plan(
 
     try:
         model = genai.GenerativeModel(
-            model_name="models/gemini-1.5-flash",
+            model_name="models/gemini-2.0-flash",
             generation_config={
                 "temperature": 0.7,
                 "top_p": 0.8,
@@ -150,6 +155,8 @@ async def generate_plan(
         )
 
 # Modified generate-plan-pdf endpoint with Firebase auth
+
+
 @app.post("/generate-plan-pdf")
 async def generate_plan_pdf(
     data: PlanningRequest,
@@ -160,7 +167,7 @@ async def generate_plan_pdf(
     try:
         # Generate plan with structured format
         model = genai.GenerativeModel(
-            model_name="models/gemini-1.5-flash",
+            model_name="models/gemini-2.0-flash",
             generation_config={
                 "temperature": 0.7,
                 "top_p": 0.8,
@@ -205,7 +212,8 @@ async def generate_plan_pdf(
         pdf.cell(0, 10, "Availability:", ln=True)
         pdf.set_font("Arial", "", 12)
         pdf.multi_cell(0, 10, f"Hours per day: {data.hoursPerDay}")
-        pdf.multi_cell(0, 10, f"Time slot: {data.timeSlot['start']} - {data.timeSlot['end']}")
+        pdf.multi_cell(
+            0, 10, f"Time slot: {data.timeSlot['start']} - {data.timeSlot['end']}")
         pdf.ln(10)
 
         # Add plan content
@@ -232,7 +240,8 @@ async def generate_plan_pdf(
         # Clean up old files (optional)
         for f in os.listdir("./tmp"):
             if f.startswith(f"study_plan_{user_id}_"):
-                file_age = datetime.now() - datetime.fromtimestamp(os.path.getctime(f"./tmp/{f}"))
+                file_age = datetime.now() - \
+                    datetime.fromtimestamp(os.path.getctime(f"./tmp/{f}"))
                 if file_age.days > 1:  # Remove files older than 1 day
                     os.remove(f"./tmp/{f}")
 
@@ -251,6 +260,7 @@ async def generate_plan_pdf(
             status_code=500,
             detail=f"Error generating PDF: {str(e)}"
         )
+
 
 def parse_day_info(day_text):
     try:
@@ -273,6 +283,8 @@ def parse_day_info(day_text):
         return None
 
 # Health check endpoint
+
+
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "timestamp": datetime.now().isoformat()}

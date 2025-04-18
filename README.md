@@ -1,67 +1,39 @@
 # GoalMineAI Backend
 
-FastAPI backend service for GoalMineAI, providing AI-powered goal planning and PDF generation.
+A FastAPI service that generates study plans using Google's Gemini AI.
 
 ## Features
 
-- 🤖 Integration with Google's Gemini 1.5 Flash
-- 🔒 Firebase authentication
-- 📄 PDF generation
-- 🔄 CORS support
-- 📝 Detailed logging
+- AI-powered study plans
+- PDF export
+- Firebase authentication
+- CORS enabled
 
-## Tech Stack
+## Setup
 
-- FastAPI
-- Google Gemini AI
-- Firebase Admin SDK
-- FPDF (PDF generation)
-- Python 3.9+
+1. **Install Python 3.9+**
 
-## Getting Started
-
-### Prerequisites
-
-- Python 3.9 or higher
-- pip
-- Firebase Admin SDK credentials
-- Google Gemini API key
-
-### Installation
-
-1. Clone the repository:
+2. **Clone & Install**
 
 ```bash
 git clone https://github.com/yourusername/GoalMineAI.git
 cd GoalMine-Backend
-```
-
-2. Create and activate a virtual environment:
-
-```bash
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-3. Install dependencies:
-
-```bash
+venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-4. Create a `.env` file:
+3. **Configure**
+
+- Create `.env` file:
 
 ```env
 GEMINI_API_KEY=your_gemini_api_key
 ```
 
-5. Add your Firebase Admin SDK credentials:
+- Add `firebase-adminsdk.json` to root folder
 
-- Download your Firebase Admin SDK JSON file
-- Rename it to `firebase-adminsdk.json`
-- Place it in the project root
-
-6. Run the server:
+4. **Run**
 
 ```bash
 uvicorn main:app --reload
@@ -71,17 +43,29 @@ uvicorn main:app --reload
 
 ### POST /generate-plan
 
-Generate a study plan based on user input.
+Creates a study plan
+
+```json
+{
+  "goal": "Learn Python",
+  "hoursPerDay": "2",
+  "timeSlot": {
+    "start": "09:00",
+    "end": "11:00"
+  }
+}
+```
 
 ### POST /generate-plan-pdf
 
-Generate and download a PDF version of the study plan.
+Generates PDF version of the plan
 
 ### GET /health
 
-Health check endpoint.
+Checks server status
 
-## Environment Variables
+## Requirements
 
-- `GEMINI_API_KEY`: Google Gemini API key
-- Firebase credentials (via firebase-adminsdk.json)
+- Python 3.9+
+- Firebase credentials
+- Gemini API key
